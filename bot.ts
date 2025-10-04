@@ -1,4 +1,4 @@
-import { Bot, Context, GrammyError, session } from "grammy";
+import { Bot, Context, GrammyError } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
 import { ScheduleDatabase } from "./db";
 import { log, notify } from "./logger";
@@ -55,7 +55,7 @@ async function botSendSchedule(
     await c.reply(
       "Не указан источник расписания. Используйте /settings и выберите источник.",
     );
-    log.debug("did not send schedule - source is not set");
+    log.debug(`did not send schedule - source is not set (${cid})`);
     return;
   }
   if (await isSpamming(c, "schedule")) {
@@ -67,7 +67,7 @@ async function botSendSchedule(
   const reply = await sapi.getScheduleMessage(source_type, source);
   if (reply.length > 4096) {
     log.warn(
-      `message is too long (${reply.length}), can't send it! source: ${source}`,
+      `message is too long (${reply.length}), can't send it! source: ${source} (${cid})`,
     );
     await c.api.editMessageText(
       cid,
@@ -80,12 +80,12 @@ async function botSendSchedule(
     await c.api.editMessageText(cid, mid, reply, {
       parse_mode: "MarkdownV2",
     });
-    log.debug(`sent schedule (${source})`);
+    log.debug(`sent schedule ${source} (${cid})`);
     await updateTimestamp(c, "schedule");
   } catch (err) {
     const e = err as Error;
     const mes = e.message;
-    log.error(`can not send schedule: ${mes}`);
+    log.error(`can not send schedule: ${mes} (${cid})`);
     await c.api.editMessageText(
       cid,
       mid,
@@ -147,15 +147,17 @@ bot.command("status", async (c: Context) => {
     await c.reply("Слишком частые запросы, подождите немного!");
     return;
   }
+  const cid = c.chatId ?? -1;
   const user = await fetchUser(c);
   const mes = await c.reply("_Соединение с сайтом\\.\\.\\._", {
     parse_mode: "MarkdownV2",
   });
   const text = await sapi.getStatusMessage();
-  await c.api.editMessageText(c.chatId ?? -1, mes.message_id, text, {
+  await c.api.editMessageText(cid, mes.message_id, text, {
     parse_mode: "MarkdownV2",
   });
   await updateTimestamp(c, "status");
+  log.debug(`sent status - ${cid}`);
 });
 bot.command("help", async (c: Context) => {
   const user = await fetchUser(c);

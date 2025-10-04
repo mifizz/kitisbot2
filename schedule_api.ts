@@ -376,7 +376,7 @@ export class ScheduleAPI {
       return this._messageEscape(
         "Указан неверный источник расписания! (возможно он устарел)\nИспользуйте /settings и обновите его!",
       );
-    else if (!(source in j)) {
+    else if (!("source" in j) || j.source === "") {
       return this._messageEscape(
         "Не удалось получить данные расписания, попробуйте позже!",
       );
