@@ -47,13 +47,16 @@ export class ScheduleDatabase {
     }
   }
   async userAdd(id: number | string, username: string) {
-    await this.db.query(
-      `INSERT INTO users (id, username, stats) VALUES ($1, $2, $3)
-  ON CONFLICT (id) DO UPDATE SET username = EXCLUDED.username`,
-      [id, username, JSON.stringify({ join: dayjs().toString() })],
-    );
-    // idk if it was added or just updated, log anyway, i am too lazy to solve it
-    log.info(`add user: ${id} - '${username}'`);
+    if (
+      !(await this.db.query(`SELECT * FROM users WHERE id = $1`, [id])).rowCount
+    ) {
+      await this.db.query(
+        `INSERT INTO users (id, username, stats) VALUES ($1, $2, $3)`,
+        [id, username, JSON.stringify({ join: dayjs().toString() })],
+      );
+      // idk if it was added or just updated, log anyway, i am too lazy to solve it
+      log.info(`add user: ${id} - '${username}'`);
+    }
   }
   async userGet(id: number | string) {
     const res = await this.db.query("SELECT * FROM users WHERE id = $1", [id]);
