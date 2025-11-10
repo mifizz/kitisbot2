@@ -156,7 +156,7 @@ export class ScheduleAPI {
         // there it is, most fucking annoying part of the work
         // td is date
         const text0 = $(tds[0]).text().trim();
-        if (!text0.includes("-") && text0.length > 1) {
+        if (!text0.includes(":") && text0.length > 1) {
           [current_date = "", current_weekday = ""] = text0.split("\\n");
           if (Object.entries(current_day).length > 0) days.push(current_day);
           current_day = {
