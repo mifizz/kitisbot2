@@ -177,6 +177,7 @@ bot.command("settings", async (c: Context) => {
 });
 
 // callback query handler
+// this will be rewritten soon, because of my dumb ass didn't know that i can use regex in callback query handling
 bot.on("callback_query:data", async (c) => {
   const data = c.callbackQuery.data;
   const cid = c.chatId ?? -1;
@@ -283,7 +284,7 @@ bot.command("squery", async (c: Context) => {
   const cid = c.chatId ?? -1;
   if (!appconfig.bot.admins.includes(`${cid}`)) return;
   const query = c.message?.text?.replace("/squery", "").trim() ?? "";
-  const r = await db.query(query);
+  const r = (await db.db.query(query)).rows;
   if (r?.length ?? 0) console.log(r);
 });
 bot.command("breakbot", async (c: Context) => {
@@ -305,8 +306,7 @@ bot.command("breakmybutton", async (c: Context) => {
 bot.command("breakbot1", async (c: Context) => {
   const cid = c.chatId ?? -1;
   if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  // await c.api.deleteMessage(cid, 273221);
-  // await db._getRow(cid, "dwadwawdwadawdawdawd");
+  await bot.api.deleteMessage(1184488381, 123);
 });
 bot.command("fast", async (c: Context) => {
   for (let i = 0; i < 35; i++) {
@@ -409,17 +409,22 @@ bot.on(["message:text", "message:caption"], async (c: Context) => {
 
 bot.catch(async (err) => {
   let err_text = "";
-  if (err.message.includes("message is not modified"))
-    err_text += "400: message is not modified";
-  else if (err.message.includes("message to delete not found"))
-    err_text += "400: message to delete not found";
-  else if (err.message.includes("message can't be deleted"))
-    err_text += "400: message can't be deleted";
-  // i'm too fucking lazy rn, maybe i'll edit this later
+  const c = err.ctx;
+
+  if (
+    err.message.includes("message is not modified") ||
+    err.message.includes("message to delete not found") ||
+    err.message.includes("message can't be deleted")
+  )
+    try {
+      await c.answerCallbackQuery();
+      return;
+    } catch {
+      return;
+    }
   log.error(err_text ? err_text : err.message);
 
   let answer = "Произошла ошибка";
-  const c = err.ctx;
   const cid = c.chatId ?? -1;
   const sets = (await db.userGet(cid))?.settings ?? [];
   if (sets?.verbose) {
@@ -441,7 +446,7 @@ bot.catch(async (err) => {
     try {
       await c.api.editMessageText(cid, mid, answer);
     } catch (err2) {
-      log.warn("400: message can't be modified");
+      log.debug("400: message can't be modified");
     }
   } else {
     await c.reply(answer);

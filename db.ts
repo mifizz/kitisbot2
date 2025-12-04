@@ -19,13 +19,6 @@ export class ScheduleDatabase {
       database: appconfig.db.database,
     }),
   ) {}
-  async _getRow(id: number | string, row: string) {
-    const res = await this.db.query("SELECT $2 FROM users WHERE id = $1", [
-      id,
-      row,
-    ]);
-    return res.rows[0] ?? null;
-  }
   async connect() {
     await this.db.connect();
     await this.db.query(`
@@ -36,38 +29,21 @@ export class ScheduleDatabase {
       stats JSONB NOT NULL DEFAULT '{}'
     )`);
   }
-  async query(query: string) {
-    try {
-      const r = await this.db.query(query);
-      return r.rows ?? null;
-    } catch (err) {
-      const e = err as Error;
-      log.error(e.message);
-      return null;
-    }
-  }
   async userAdd(id: number | string, username: string) {
     if (
-      !(await this.db.query(`SELECT * FROM users WHERE id = $1`, [id])).rowCount
-    ) {
-      await this.db.query(
-        `INSERT INTO users (id, username, stats) VALUES ($1, $2, $3)`,
-        [id, username, JSON.stringify({ join: dayjs().toString() })],
-      );
-      // idk if it was added or just updated, log anyway, i am too lazy to solve it
-      log.info(`add user: ${id} - '${username}'`);
-    }
+      (await this.db.query("SELECT * FROM users WHERE id = $1", [id])).rowCount
+    )
+      return;
+    await this.db.query(
+      `INSERT INTO users (id, username, stats) VALUES ($1, $2, $3)`,
+      [id, username, JSON.stringify({ join: dayjs().toString() })],
+    );
+    log.info(`add user: ${id} - '${username}'`);
   }
   async userGet(id: number | string) {
     const res = await this.db.query("SELECT * FROM users WHERE id = $1", [id]);
     return (res.rows[0] as BotUser) ?? null;
   }
-  // async userGetSettings(id: number) {
-  //   return this._getRow(id, "settings") ?? {};
-  // }
-  // async userGetStats(id: number) {
-  //   return this._getRow(id, "stats") ?? {};
-  // }
   async userGetAll() {
     const res = await this.db.query("SELECT * FROM users");
     return (res.rows as BotUser[]) ?? null;
@@ -84,7 +60,6 @@ export class ScheduleDatabase {
       id,
       JSON.stringify(stats),
     ]);
-    // log.debug(`updated stats: ${id} - '${JSON.stringify(stats)}'`);
   }
   async userDel(id: number | string, reason: string = "") {
     await this.db.query("DELETE FROM users WHERE id = $1", [id]);

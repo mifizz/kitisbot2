@@ -72,5 +72,4 @@ help - помощь по боту
 
 ## Ссылки
 - [Телеграм-бот](https://t.me/kitis_schedule_bot)
-- [Телеграм-канал разработчика](https://t.me/devmifizz)
-- [Купить мне булочку из пятёрочки](https://www.tbank.ru/cf/4DS1RXcj8vn)
+- [Чат в телеграме](https://t.me/+xQHZL9P1VGYyOTdi)

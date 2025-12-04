@@ -53,12 +53,12 @@ export class ScheduleAPI {
   }
   async _fetchHTML(url: string) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const buffer = Buffer.from(await r.arrayBuffer());
       return this._decodeHTML(buffer);
     } catch (err) {
       const e = err as Error;
-      log.debug(e.message);
+      log.debug(`fetch error: ${e.message}`);
       return "";
     }
   }
@@ -116,7 +116,7 @@ export class ScheduleAPI {
   async _getStatus(url: string) {
     const r_start = Date.now();
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(5000) });
       const r_end = Date.now();
       return {
         status: r.status,
@@ -126,7 +126,7 @@ export class ScheduleAPI {
     } catch (err) {
       const r_end = Date.now();
       const e = err as Error;
-      log.debug(e.message);
+      log.debug(`status error: ${e.message}`);
       return {
         status: -1,
         text: e.message,
@@ -355,6 +355,10 @@ export class ScheduleAPI {
   async getStatusMessage() {
     const j = await this.getStatus();
     if (j.status === -1) {
+      if (j.text.includes("timed out"))
+        return this._messageEscape(
+          `*Не удаётся установить соединение с сайтом!* _(таймаут)_`,
+        );
       return this._messageEscape(
         `*Не удаётся установить соединение с сайтом!*\n\nТекст ошибки:\n_${j.text}_`,
       );
@@ -372,15 +376,10 @@ export class ScheduleAPI {
     exclude_empty_days: boolean = appconfig.bot.schedule_exclude_empty_days,
   ) {
     const j = await this.getSchedule(source_type, source);
-    if (j.status === "error")
+    if (j.status === "error" || !("source" in j) || j.source === "")
       return this._messageEscape(
-        "Указан неверный источник расписания! (возможно он устарел)\nИспользуйте /settings и обновите его!",
+        "Не удалось получить данные расписания, используйте /status для проверки работоспособности сайта или попробуйте позже!",
       );
-    else if (!("source" in j) || j.source === "") {
-      return this._messageEscape(
-        "Не удалось получить данные расписания, попробуйте позже!",
-      );
-    }
     const mes = this._formatScheduleMessage(
       j,
       truncate,
@@ -395,34 +394,20 @@ export class ScheduleAPI {
     truncate: number = -1,
   ) {
     const j = await this.getSchedule(source_type, source);
-    if (j.status === "error")
-      return this._messageEscape("Указан неверный источник учёта!");
-    else if (!(source in j)) {
+    if (j.status === "error" || !("source" in j))
       return this._messageEscape(
-        "Не удалось получить данные учёта занятий, попробуйте позже!",
+        "Не удалось получить данные учёта занятий, используйте /status для проверки работоспособности сайта или попробуйте позже!",
       );
-    }
     const mes = this._formatRecordsMessage(j);
     return this._messageEscape(mes);
   }
 }
 
+// example for schedule and records
 // const sapi = await new ScheduleAPI().init();
-// log.debug("init complete");
-// log.debug(sapi.links);
-
 // const source_type = "lecturer";
 // const source = "Сергиеня Д.Д.";
 // const [s, r] = await Promise.all([
 //   sapi.getSchedule(source_type, source),
 //   sapi.getRecords(source_type, source),
 // ]);
-// log.debug("got data");
-// Bun.write("sapi-test-s.json", JSON.stringify(s, null, 2));
-// Bun.write("sapi-test-r.json", JSON.stringify(r, null, 2));
-// log.debug("wrote data");
-
-// log.debug(sapi._formatScheduleMessage(s, 80, false, false));
-
-// log.debug(await sapi._getStatus(sapi.BASE_LINKS["index"] ?? ""));
-// log.debug(await sapi._getStatus("https://httpbingo.org"));
