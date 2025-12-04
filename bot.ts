@@ -177,100 +177,95 @@ bot.command("settings", async (c: Context) => {
 });
 
 // callback query handler
-// this will be rewritten soon, because of my dumb ass didn't know that i can use regex in callback query handling
-bot.on("callback_query:data", async (c) => {
-  const data = c.callbackQuery.data;
-  const cid = c.chatId ?? -1;
-  const mid = c.callbackQuery.message?.message_id ?? -1;
-  const [section = "", action = "", param = ""] = data.split(":");
+bot.callbackQuery(/^settings::$/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1;
   await c.answerCallbackQuery();
-
-  // dispatcher
-  if (section === "settings") {
-    if (action === "") {
-      await c.api.editMessageText(cid, mid, "⚙️ Настройки", {
-        reply_markup: kbs["settings"],
-      });
-    }
-    if (action === "debug_mode") {
-      const text =
-        "Режим отладки позволяет отслеживать ошибки. Возможно, в будущем будет больше того, на что влияет эта настройка :)";
-      const sets: Record<string, any> = (await db.userGet(cid))?.settings;
-      let verbose = sets?.verbose;
-      if (param === "enable" || param === "disable") {
-        verbose = param === "enable";
-        await db.userUpdateSettings(cid, {
-          ...sets,
-          verbose: verbose,
-        });
-      }
-      await c.api.editMessageText(cid, mid, text, {
-        reply_markup: Boolean(verbose)
-          ? kbs["debug_enabled"]
-          : kbs["debug_disabled"],
-      });
-    } else if (action === "set_source_type") {
-      if (param === "") {
-        await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
-          reply_markup: kbs["set_source_type"],
-        });
-      } else if (["group", "lecturer", "room"].includes(param)) {
-        await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
-          reply_markup: kbs[`set_source_${param}`],
-        });
-      } else {
-        await c.api.editMessageText(cid, mid, "Не могу выполнить запрос!");
-      }
-    }
-  } else if (section === "db") {
-    let status = "";
-    if (action === "ss") {
-      const sets: Record<string, any> = (await db.userGet(cid))?.settings;
-      const will_send_schedule = !Boolean(sets?.source);
-      let [, source_type = "", source = ""] = param.match(/(\w+)\.(.+)$/) ?? [];
-      source_type = { g: "group", l: "lecturer", r: "room" }[source_type] ?? "";
-      if (source_type && source) {
-        await db.userUpdateSettings(cid, {
-          ...sets,
-          source_type: source_type,
-          source: source,
-        });
-        status = "*Источник расписания изменён\\!*";
-        if (will_send_schedule)
-          botSendSchedule(c, source_type, source, sets?.verbose ?? false);
-      } else status = "*Что\\-то пошло не так\\!*";
-    }
-    await c.api.editMessageText(cid, mid, `${status}\n\n⚙️ Настройки`.trim(), {
-      reply_markup: kbs["settings"],
-      parse_mode: "MarkdownV2",
+  await c.api.editMessageText(cid, mid, "⚙️ Настройки", {
+    reply_markup: kbs["settings"],
+  });
+});
+bot.callbackQuery(/^settings:debug_mode:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "",
+    text =
+      "Режим отладки позволяет отслеживать ошибки. Возможно, в будущем будет больше того, на что влияет эта настройка :)",
+    sets = (await db.userGet(cid))?.settings;
+  await c.answerCallbackQuery();
+  let verbose: boolean = sets?.verbose;
+  if (param !== "") {
+    verbose = param === "enable";
+    await db.userUpdateSettings(cid, {
+      ...sets,
+      verbose: param === "enable",
     });
-  } else if (section === "get") {
-    if (action === "get_source_type") {
-      if (param === "") {
-        await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
-          reply_markup: kbs["get_source_type"],
-        });
-      } else if (["group", "lecturer", "room"].includes(param)) {
-        await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
-          reply_markup: kbs[`get_source_${param}`],
-        });
-      }
-    } else if (action === "g") {
-      let [, source_type = "", source = ""] = param.match(/(\w+)\.(.+)$/) ?? [];
-      source_type =
-        { g: "group", l: "lecturer", r: "room" }[source_type] ?? "none";
-      log.debug(`'${source_type}', '${source}'`);
-      await c.api.deleteMessage(cid, mid);
-      botSendSchedule(c, source_type, source);
-    }
-  } else if (section === "debug") {
-    if (action === "breakbot") {
-      await fetch("w_w");
-    } else if (action === "breakbot1") {
-      await c.api.answerCallbackQuery("123");
-      await c.api.editMessageText(cid, mid, "debug");
-    }
   }
+  await c.api.editMessageText(cid, mid, text, {
+    reply_markup: verbose ? kbs["debug_enabled"] : kbs["debug_disabled"],
+  });
+});
+bot.callbackQuery(/^settings:set_source_type:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "",
+    key = `set_source_${param === "" ? "type" : param}`;
+  await c.answerCallbackQuery();
+  await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
+    reply_markup: kbs[key],
+  });
+});
+bot.callbackQuery(/^db:ss:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "",
+    sets = (await db.userGet(cid))?.settings,
+    will_send_schedule = !Boolean(sets?.source);
+  await c.answerCallbackQuery();
+  let status = "",
+    [, source_type = "", source = ""] = param.match(/(\w+)\.(.+)$/) ?? [];
+  source_type = { g: "group", l: "lecturer", r: "room" }[source_type] ?? "";
+  if (source_type && source) {
+    await db.userUpdateSettings(cid, {
+      ...sets,
+      source_type: source_type,
+      source: source,
+    });
+    status = "*Источник расписания изменён\\!*";
+    if (will_send_schedule)
+      await botSendSchedule(c, source_type, source, sets?.verbose ?? false);
+  } else status = "*Что\\-то пошло не так\\!*";
+  await c.api.editMessageText(cid, mid, `${status}\n\n⚙️ Настройки`.trim(), {
+    reply_markup: kbs["settings"],
+    parse_mode: "MarkdownV2",
+  });
+});
+bot.callbackQuery(/^get:get_source_type:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "",
+    key = `get_source_${param === "" ? "type" : param}`;
+  await c.answerCallbackQuery();
+  await c.api.editMessageText(cid, mid, "Выберите источник расписания:", {
+    reply_markup: kbs[key],
+  });
+});
+bot.callbackQuery(/^get:g:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "";
+  await c.answerCallbackQuery();
+  let [, source_type = "", source = ""] = param.match(/(\w)\.(.+)$/) ?? [];
+  source_type = { g: "group", l: "lecturer", r: "room" }[source_type] ?? "none";
+  await c.api.deleteMessage(cid, mid);
+  await botSendSchedule(c, source_type, source);
+});
+bot.callbackQuery(/^debug:breakbot:/, async (c) => {
+  const cid = c.chatId ?? -1,
+    mid = c.callbackQuery.message?.message_id ?? -1,
+    param = c.callbackQuery.data.split(":")?.[2] ?? "";
+  await c.answerCallbackQuery();
+  await fetch("w_w");
 });
 
 /// DEBUG
@@ -289,10 +284,7 @@ bot.command("squery", async (c: Context) => {
 });
 bot.command("breakbot", async (c: Context) => {
   const cid = c.chatId ?? -1;
-  console.log(cid);
   if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  const a = "123";
-  await fetch(a);
 });
 bot.command("breakmybutton", async (c: Context) => {
   const cid = c.chatId ?? -1;
@@ -302,16 +294,6 @@ bot.command("breakmybutton", async (c: Context) => {
       inline_keyboard: [[{ text: "ЖМИ!!!", callback_data: "debug:breakbot:" }]],
     },
   });
-});
-bot.command("breakbot1", async (c: Context) => {
-  const cid = c.chatId ?? -1;
-  if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  await bot.api.deleteMessage(1184488381, 123);
-});
-bot.command("fast", async (c: Context) => {
-  for (let i = 0; i < 35; i++) {
-    await c.reply(`test message ${i + 1}`);
-  }
 });
 // announcement
 async function sendAnnouncement(c: Context, id: number | string, text: string) {
