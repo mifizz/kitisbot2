@@ -11,8 +11,6 @@ const DEFAULT_CONFIG = {
   },
   bot: {
     admins: [],
-    schedule_exclude_empty_days: false,
-    schedule_exclude_empty_weekends: true,
   },
   logger: {
     level: "debug",
@@ -22,48 +20,8 @@ const DEFAULT_CONFIG = {
     use_ntfy: false,
     ntfy_url: "https://ntfy.sh/kitisbot_notifications",
   },
-  data: {
-    bells: {
-      1: "8:30-10:00",
-      2: "10:10-11:40",
-      3: "12:10-13:40",
-      4: "13:50-15:20",
-      5: "15:30-17:00",
-      6: "17:10-18:40",
-      7: "18:50-20:20",
-    },
-    bells_monday: {
-      1: "8:30-9:00 / 15:20-15:50",
-      2: "9:10-10:30",
-      3: "10:40-12:00",
-      4: "12:20-13:40",
-      5: "13:50-15:10",
-      6: "16:00-17:20",
-      7: "17:30-18:50",
-    },
-    weekdays: {
-      Пн: "Понедельник",
-      Вт: "Вторник",
-      Ср: "Среда",
-      Чт: "Четверг",
-      Пт: "Пятница",
-      Сб: "Суббота",
-      Вс: "Воскресенье",
-    },
-    source_types: {
-      Группа: "group",
-      Преподаватель: "lecturer",
-      Аудитория: "room",
-    },
-    base_links: {
-      base: "http://94.72.18.202:8083",
-      index: "http://94.72.18.202:8083/index.htm",
-      s_group: "http://94.72.18.202:8083/cg.htm",
-      s_lecturer: "http://94.72.18.202:8083/cp.htm",
-      s_room: "http://94.72.18.202:8083/ca.htm",
-      r_group: "http://94.72.18.202:8083/vg.htm",
-      r_lecturer: "http://94.72.18.202:8083/vp.htm",
-    },
+  api: {
+    base_url: "https://api.shkitis.ru",
   },
 };
 
@@ -86,13 +44,9 @@ const config_schema = z.object({
   bot: z
     .object({
       admins: z.array(z.string()).default([]),
-      schedule_exclude_empty_days: z.boolean().default(false),
-      schedule_exclude_empty_weekends: z.boolean().default(true),
     })
     .default({
       admins: [""],
-      schedule_exclude_empty_days: false,
-      schedule_exclude_empty_weekends: true,
     }),
   logger: z
     .object({
@@ -111,95 +65,13 @@ const config_schema = z.object({
       use_ntfy: false,
       ntfy_url: "https://ntfy.sh/kitisbot_notifications",
     }),
-  data: z.object({
-    bells: z
-      .object({
-        1: z.string().default("8:30-10:00"),
-        2: z.string().default("10:10-11:40"),
-        3: z.string().default("12:10-13:40"),
-        4: z.string().default("13:50-15:20"),
-        5: z.string().default("15:30-17:00"),
-        6: z.string().default("17:10-18:40"),
-        7: z.string().default("18:50-20:20"),
-      })
-      .default({
-        1: "8:30-10:00",
-        2: "10:10-11:40",
-        3: "12:10-13:40",
-        4: "13:50-15:20",
-        5: "15:30-17:00",
-        6: "17:10-18:40",
-        7: "18:50-20:20",
-      }),
-    bells_monday: z
-      .object({
-        1: z.string().default("8:30-9:00 / 15:20-15:50"),
-        2: z.string().default("9:10-10:30"),
-        3: z.string().default("10:40-12:00"),
-        4: z.string().default("12:20-13:40"),
-        5: z.string().default("13:50-15:10"),
-        6: z.string().default("16:00-17:20"),
-        7: z.string().default("17:30-18:50"),
-      })
-      .default({
-        1: "8:30-9:00 / 15:20-15:50",
-        2: "9:10-10:30",
-        3: "10:40-12:00",
-        4: "12:20-13:40",
-        5: "13:50-15:10",
-        6: "16:00-17:20",
-        7: "17:30-18:50",
-      }),
-    weekdays: z
-      .object({
-        Пн: z.string().default("Понедельник"),
-        Вт: z.string().default("Вторник"),
-        Ср: z.string().default("Среда"),
-        Чт: z.string().default("Четверг"),
-        Пт: z.string().default("Пятница"),
-        Сб: z.string().default("Суббота"),
-        Вс: z.string().default("Воскресенье"),
-      })
-      .default({
-        Пн: "Понедельник",
-        Вт: "Вторник",
-        Ср: "Среда",
-        Чт: "Четверг",
-        Пт: "Пятница",
-        Сб: "Суббота",
-        Вс: "Воскресенье",
-      }),
-    source_types: z
-      .object({
-        Группа: z.string().default("group"),
-        Преподаватель: z.string().default("lecturer"),
-        Аудитория: z.string().default("room"),
-      })
-      .default({
-        Группа: "group",
-        Преподаватель: "lecturer",
-        Аудитория: "room",
-      }),
-    base_links: z
-      .object({
-        base: z.string().default("http://94.72.18.202:8083"),
-        index: z.string().default("http://94.72.18.202:8083/index.htm"),
-        s_group: z.string().default("http://94.72.18.202:8083/cg.htm"),
-        s_lecturer: z.string().default("http://94.72.18.202:8083/cp.htm"),
-        s_room: z.string().default("http://94.72.18.202:8083/ca.htm"),
-        r_group: z.string().default("http://94.72.18.202:8083/vg.htm"),
-        r_lecturer: z.string().default("http://94.72.18.202:8083/vp.htm"),
-      })
-      .default({
-        base: "http://94.72.18.202:8083",
-        index: "http://94.72.18.202:8083/index.htm",
-        s_group: "http://94.72.18.202:8083/cg.htm",
-        s_lecturer: "http://94.72.18.202:8083/cp.htm",
-        s_room: "http://94.72.18.202:8083/ca.htm",
-        r_group: "http://94.72.18.202:8083/vg.htm",
-        r_lecturer: "http://94.72.18.202:8083/vp.htm",
-      }),
-  }),
+  api: z
+    .object({
+      base_url: z.string().default("https://api.shkitis.ru"),
+    })
+    .default({
+      base_url: "https://api.shkitis.ru",
+    }),
 });
 export type Config = z.infer<typeof config_schema>;
 const CONFIG_PATH = "./config.json";

@@ -12,6 +12,7 @@ export async function notify(
   tags: string = "",
 ) {
   try {
+    const token = process.env.TOKEN ?? "bot_token_here:123456789";
     await fetch(NTFY_URL, {
       method: "POST",
       headers: {
@@ -19,7 +20,7 @@ export async function notify(
         Priority: level === "error" ? "5" : priority,
         Tags: tags,
       },
-      body: message,
+      body: message.replace(token, "<BOT_TOKEN>"),
     });
   } catch (err) {
     const e = err as Error;

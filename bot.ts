@@ -2,7 +2,7 @@ import { Bot, Context, GrammyError } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
 import { ScheduleDatabase } from "./db";
 import { log, notify } from "./logger";
-import { sapi, kbs } from "./helper";
+import { api, kbs } from "./helper";
 import { appconfig } from "./config";
 
 const db = new ScheduleDatabase();
@@ -16,9 +16,9 @@ if (!BOT_TOKEN) {
 }
 const bot = new Bot(BOT_TOKEN);
 bot.use(
-  sequentialize((ctx) => {
-    const chat = ctx.chat?.id.toString();
-    const user = ctx.from?.id.toString();
+  sequentialize((c) => {
+    const chat = c.chat?.id.toString();
+    const user = c.from?.id.toString();
     return [chat, user].filter((con) => con !== undefined);
   }),
 );
@@ -35,12 +35,12 @@ bot.command("start", async (c: Context) => {
   }
   db.userAdd(uid, uname);
   await c.reply(
-    `Привет, это бот для просмотра расписания КИТиС!\nДля начала выбери источник расписания с помощью команды /settings и кнопки "источник расписания", а после этого используй команду /schedule, чтобы посмотреть своё расписание!
+    `Привет, это бот для просмотра расписания КИТиС!\nДля начала выбери источник расписания с помощью команды /settings и кнопки "источник расписания", а после этого используй команду /myschedule, чтобы посмотреть своё расписание!
 
 Вот все команды бота:
 /settings - настройки бота
-/schedule - ваше расписание
-/scheduleby - чужое расписание
+/myschedule - ваше расписание
+/schedule - чужое расписание
 /status - статус сайта
 /help - помощь с ботом`,
   );
@@ -57,16 +57,11 @@ async function botSendSchedule(
     await c.reply(
       "Не указан источник расписания. Используйте /settings и выберите источник.",
     );
-    log.debug(`did not send schedule - source is not set (${cid})`);
-    return;
-  }
-  if (await isSpamming(c, "schedule")) {
-    await c.reply("Слишком частые запросы, подождите немного!");
     return;
   }
   const mes = await c.reply("Получаю информацию...");
   const mid = mes.message_id; // message_id => mid
-  const reply = await sapi.getScheduleMessage(source_type, source);
+  const reply = await api.getScheduleMessage(source_type, source);
   if (reply.length > 4096) {
     log.warn(
       `message is too long (${reply.length}), can't send it! source: ${source} (${cid})`,
@@ -82,8 +77,6 @@ async function botSendSchedule(
     await c.api.editMessageText(cid, mid, reply, {
       parse_mode: "MarkdownV2",
     });
-    log.debug(`sent schedule ${source} (${cid})`);
-    await updateTimestamp(c, "schedule");
   } catch (err) {
     const e = err as Error;
     const mes = e.message;
@@ -95,82 +88,50 @@ async function botSendSchedule(
     );
   }
 }
-async function fetchUser(c: Context) {
+async function fetchUserSettings(c: Context) {
   const cid = c.chatId ?? -1;
-  const user = await db.userGet(cid);
-  if (!user || user.username !== (c.chat?.username ?? "")) {
-    const username = c.chat?.username ?? "";
-    await db.userAdd(cid, username);
-    return await db.userGet(cid);
-  }
+  const cname = c.chat?.username ?? "";
+  await db.userAdd(cid, cname);
+  const user = await db.userGetSettings(cid);
   return user;
 }
-async function updateTimestamp(c: Context, action: "schedule" | "status") {
-  const cid = c.chatId ?? -1;
-  const user = await fetchUser(c);
-  const stats = user?.stats;
-  const now = Date.now();
-  const time_map = {
-    schedule: { lt_schedule: now },
-    status: { lt_status: now },
-    set: { lt_set: now },
-  };
-  await db.userUpdateStats(cid, { ...stats, ...time_map[action] });
-}
-async function isSpamming(c: Context, action: "schedule" | "status") {
-  const user = await fetchUser(c);
-  const lt = user?.stats?.[`lt_${action}`];
-  const now = Date.now();
-  const spam_map = {
-    schedule: 2500,
-    status: 1000,
-  };
-  if (now - lt < spam_map[action]) return true;
-  return false;
-}
 
-bot.command("schedule", async (c: Context) => {
-  const user = await fetchUser(c);
-  const source_type = user?.settings?.source_type ?? "";
-  const source = user?.settings?.source ?? "";
-  const verbose = user?.settings?.verbose ?? false;
-  await botSendSchedule(c, source_type, source, verbose);
+bot.command("myschedule", async (c: Context) => {
+  const user = await fetchUserSettings(c);
+  const source_type = user.source_type ?? "";
+  const source = user.source ?? "";
+  const show_errors = user.show_errors ?? false;
+  await botSendSchedule(c, source_type, source, show_errors);
 });
 
-bot.command("scheduleby", async (c: Context) => {
-  const user = await fetchUser(c);
+bot.command("schedule", async (c: Context) => {
+  const user = await fetchUserSettings(c);
   await c.reply("Выберите источник расписания:", {
     reply_markup: kbs["get_source_type"],
   });
 });
 
 bot.command("status", async (c: Context) => {
-  if (await isSpamming(c, "status")) {
-    await c.reply("Слишком частые запросы, подождите немного!");
-    return;
-  }
   const cid = c.chatId ?? -1;
-  const user = await fetchUser(c);
+  const user = await fetchUserSettings(c);
   const mes = await c.reply("_Соединение с сайтом\\.\\.\\._", {
     parse_mode: "MarkdownV2",
   });
-  const text = await sapi.getStatusMessage();
+  const text = await api.getStatusMessage();
   await c.api.editMessageText(cid, mes.message_id, text, {
     parse_mode: "MarkdownV2",
   });
-  await updateTimestamp(c, "status");
-  log.debug(`sent status - ${cid}`);
 });
 bot.command("help", async (c: Context) => {
-  const user = await fetchUser(c);
-  await c.reply(`/settings - команда для настройки бота. Например, с помощью кнопки "источник расписания" можно выбрать источник по умолчанию для команды /schedule\n
-/schedule - посмотреть ваше расписание, установленное в настройках\n
-/scheduleby - посмотреть любое расписание, для этого вызовите команду и выберите нужный источник, это не сохранится в настройках\n
+  const user = await fetchUserSettings(c);
+  await c.reply(`/settings - команда для настройки бота. Например, с помощью кнопки "источник расписания" можно выбрать источник по умолчанию для команды /myschedule\n
+/myschedule - посмотреть ваше расписание, установленное в настройках\n
+/schedule - посмотреть любое расписание, для этого вызовите команду и выберите нужный источник, это не сохранится в настройках\n
 /status - проверить статус работы сайта с расписанием: код статуса и время ответа сервера\n
 /help - посмотреть помощь по боту`);
 });
 bot.command("settings", async (c: Context) => {
-  const user = await fetchUser(c);
+  const user = await fetchUserSettings(c);
   await c.reply("⚙️ Настройки", {
     reply_markup: kbs["settings"],
   });
@@ -191,18 +152,15 @@ bot.callbackQuery(/^settings:debug_mode:/, async (c) => {
     param = c.callbackQuery.data.split(":")?.[2] ?? "",
     text =
       "Режим отладки позволяет отслеживать ошибки. Возможно, в будущем будет больше того, на что влияет эта настройка :)",
-    sets = (await db.userGet(cid))?.settings;
+    sets = await fetchUserSettings(c);
   await c.answerCallbackQuery();
-  let verbose: boolean = sets?.verbose;
+  let show_errors: boolean = sets?.show_errors;
   if (param !== "") {
-    verbose = param === "enable";
-    await db.userUpdateSettings(cid, {
-      ...sets,
-      verbose: param === "enable",
-    });
+    show_errors = param === "enable";
+    await db.userUpdateShowErrors(cid, param === "enable");
   }
   await c.api.editMessageText(cid, mid, text, {
-    reply_markup: verbose ? kbs["debug_enabled"] : kbs["debug_disabled"],
+    reply_markup: show_errors ? kbs["debug_enabled"] : kbs["debug_disabled"],
   });
 });
 bot.callbackQuery(/^settings:set_source_type:/, async (c) => {
@@ -219,21 +177,17 @@ bot.callbackQuery(/^db:ss:/, async (c) => {
   const cid = c.chatId ?? -1,
     mid = c.callbackQuery.message?.message_id ?? -1,
     param = c.callbackQuery.data.split(":")?.[2] ?? "",
-    sets = (await db.userGet(cid))?.settings,
-    will_send_schedule = !Boolean(sets?.source);
+    sets = await fetchUserSettings(c),
+    will_send_schedule = !Boolean(sets.source);
   await c.answerCallbackQuery();
   let status = "",
     [, source_type = "", source = ""] = param.match(/(\w+)\.(.+)$/) ?? [];
   source_type = { g: "group", l: "lecturer", r: "room" }[source_type] ?? "";
   if (source_type && source) {
-    await db.userUpdateSettings(cid, {
-      ...sets,
-      source_type: source_type,
-      source: source,
-    });
+    await db.userUpdateSource(cid, source_type, source);
     status = "*Источник расписания изменён\\!*";
     if (will_send_schedule)
-      await botSendSchedule(c, source_type, source, sets?.verbose ?? false);
+      await botSendSchedule(c, source_type, source, sets.show_errors ?? false);
   } else status = "*Что\\-то пошло не так\\!*";
   await c.api.editMessageText(cid, mid, `${status}\n\n⚙️ Настройки`.trim(), {
     reply_markup: kbs["settings"],
@@ -260,41 +214,7 @@ bot.callbackQuery(/^get:g:/, async (c) => {
   await c.api.deleteMessage(cid, mid);
   await botSendSchedule(c, source_type, source);
 });
-bot.callbackQuery(/^debug:breakbot:/, async (c) => {
-  const cid = c.chatId ?? -1,
-    mid = c.callbackQuery.message?.message_id ?? -1,
-    param = c.callbackQuery.data.split(":")?.[2] ?? "";
-  await c.answerCallbackQuery();
-  await fetch("w_w");
-});
 
-/// DEBUG
-bot.command("users", async (c: Context) => {
-  const cid = c.chatId ?? -1;
-  if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  const users = await db.userGetAll();
-  log.debug(users);
-});
-bot.command("squery", async (c: Context) => {
-  const cid = c.chatId ?? -1;
-  if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  const query = c.message?.text?.replace("/squery", "").trim() ?? "";
-  const r = (await db.db.query(query)).rows;
-  if (r?.length ?? 0) console.log(r);
-});
-bot.command("breakbot", async (c: Context) => {
-  const cid = c.chatId ?? -1;
-  if (!appconfig.bot.admins.includes(`${cid}`)) return;
-});
-bot.command("breakmybutton", async (c: Context) => {
-  const cid = c.chatId ?? -1;
-  if (!appconfig.bot.admins.includes(`${cid}`)) return;
-  await c.reply("ЛОМАЙ МЕНЯ ПОЛНОСТЬЮ", {
-    reply_markup: {
-      inline_keyboard: [[{ text: "ЖМИ!!!", callback_data: "debug:breakbot:" }]],
-    },
-  });
-});
 // announcement
 async function sendAnnouncement(c: Context, id: number | string, text: string) {
   let fid = ""; // file_id
@@ -309,7 +229,7 @@ async function sendAnnouncement(c: Context, id: number | string, text: string) {
     const e = err as GrammyError;
     log.warn(`failed to send ann to ${id}: ${e.description}`);
     if (e.error_code === 403) {
-      await db.userDel(id, "blocked");
+      await db.userDelete(id);
     }
   }
 }
@@ -354,7 +274,6 @@ bot.on(["message:text", "message:caption"], async (c: Context) => {
     );
     return;
   }
-  console.log(cmd_message);
 
   const [, send_mode = ""] = cmd_parameters.match(/mode\s*=\s*(\w+)/) ?? [];
   let ids =
@@ -408,8 +327,8 @@ bot.catch(async (err) => {
 
   let answer = "Произошла ошибка";
   const cid = c.chatId ?? -1;
-  const sets = (await db.userGet(cid))?.settings ?? [];
-  if (sets?.verbose) {
+  const sets = await fetchUserSettings(c);
+  if (sets.show_errors) {
     answer += `:\n\n${err.message}`;
   } else {
     answer += '\n\n(для подробностей включите "Режим отладки" в настройках)';
@@ -428,7 +347,7 @@ bot.catch(async (err) => {
     try {
       await c.api.editMessageText(cid, mid, answer);
     } catch (err2) {
-      log.debug("400: message can't be modified");
+      log.error("400: message can't be modified");
     }
   } else {
     await c.reply(answer);

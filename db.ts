@@ -1,13 +1,17 @@
 import { Client } from "pg";
-import dayjs from "dayjs";
 import { appconfig } from "./config";
 import { log } from "./logger";
 
-interface BotUser {
+interface User {
   id: string;
   username: string;
-  settings: Record<string, any>;
-  stats: Record<string, any>;
+}
+interface UserSettings {
+  id: number;
+  source_type: string;
+  source: string;
+  show_errors: boolean;
+  favorites: string[];
 }
 
 export class ScheduleDatabase {
@@ -22,47 +26,64 @@ export class ScheduleDatabase {
   async connect() {
     await this.db.connect();
     await this.db.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY,
-      username TEXT,
-      settings JSONB NOT NULL DEFAULT '{}',
-      stats JSONB NOT NULL DEFAULT '{}'
-    )`);
+      create table if not exists users (
+        id bigint primary key,
+        username text,
+        joined timestamp default now()
+      );
+      create table if not exists settings (
+        id bigint primary key,
+        source_type text,
+        source text,
+        show_errors boolean default false,
+        favorites text
+      );`);
   }
   async userAdd(id: number | string, username: string) {
-    if (
-      (await this.db.query("SELECT * FROM users WHERE id = $1", [id])).rowCount
-    )
+    if ((await this.db.query(`SELECT id FROM users WHERE id = ${id}`)).rowCount)
       return;
-    await this.db.query(
-      `INSERT INTO users (id, username, stats) VALUES ($1, $2, $3)`,
-      [id, username, JSON.stringify({ join: dayjs().toString() })],
-    );
-    log.info(`add user: ${id} - '${username}'`);
+    await this.db.query(`
+      INSERT INTO users (id, username) VALUES (${id}, '${username}');
+      INSERT INTO settings (id) VALUES (${id});
+      `);
+    log.info(`added user: ${id} - '${username}'`);
   }
   async userGet(id: number | string) {
-    const res = await this.db.query("SELECT * FROM users WHERE id = $1", [id]);
-    return (res.rows[0] as BotUser) ?? null;
+    const res = await this.db.query(`SELECT * FROM users WHERE id = ${id}`);
+    return (res.rows[0] as User) ?? null;
+  }
+  async userGetSettings(id: number | string) {
+    const res = await this.db.query(`SELECT * FROM settings WHERE id = ${id}`);
+    return (res.rows[0] as UserSettings) ?? null;
   }
   async userGetAll() {
-    const res = await this.db.query("SELECT * FROM users");
-    return (res.rows as BotUser[]) ?? null;
+    const res = await this.db.query("SELECT id FROM users");
+    return (res.rows as User[]) ?? null;
   }
-  async userUpdateSettings(id: number | string, settings: Record<string, any>) {
-    await this.db.query("UPDATE users SET settings = $2 WHERE id = $1", [
-      id,
-      JSON.stringify(settings),
-    ]);
-    log.debug(`updated settings: ${id} - '${JSON.stringify(settings)}'`);
+  async userUpdateSource(
+    id: number | string,
+    source_type: string,
+    source: string,
+  ) {
+    return (
+      await this.db.query(
+        `UPDATE settings SET source_type = '${source_type}', source = '${source}' WHERE id = ${id}`,
+      )
+    ).rows[0];
   }
-  async userUpdateStats(id: number | string, stats: Record<string, any>) {
-    await this.db.query("UPDATE users SET stats = $2 WHERE id = $1", [
-      id,
-      JSON.stringify(stats),
-    ]);
+  async userUpdateShowErrors(id: number | string, show_errors: boolean) {
+    return (
+      await this.db.query(
+        `UPDATE settings SET show_errors = ${show_errors} WHERE id = ${id}`,
+      )
+    ).rows[0];
   }
-  async userDel(id: number | string, reason: string = "") {
-    await this.db.query("DELETE FROM users WHERE id = $1", [id]);
-    log.info(`deleted user: ${id}${reason ? ". Reason: " + reason : ""}`);
+
+  async userDelete(id: number | string) {
+    await this.db.query(`
+      DELETE FROM users WHERE id = ${id};
+      DELETE FROM settings WHERE id = ${id}
+      `);
+    log.info(`deleted user: ${id}`);
   }
 }

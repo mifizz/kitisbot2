@@ -1,6 +1,6 @@
 import { InlineKeyboard } from "grammy";
-import { ScheduleAPI } from "./schedule_api";
 import { log } from "./logger";
+import { KitisAPIwrapper } from "./api";
 
 function buildKB(
   values: string[],
@@ -15,11 +15,12 @@ function buildKB(
   return kb;
 }
 
-export const sapi = await new ScheduleAPI().init();
+export const api = new KitisAPIwrapper();
+const sources = await api.getAllSources();
 
-const list_groups = Object.keys(sapi.links["s_group"] ?? { "...": "" });
-const list_lecturers = Object.keys(sapi.links["s_lecturer"] ?? { "...": "" });
-const list_rooms = Object.keys(sapi.links["s_room"] ?? { "...": "" });
+const list_groups = sources["group"] ?? [];
+const list_lecturers = sources["lecturer"] ?? [];
+const list_rooms = sources["room"] ?? [];
 
 export const kbs: Record<string, InlineKeyboard> = {
   settings: new InlineKeyboard()
@@ -27,7 +28,7 @@ export const kbs: Record<string, InlineKeyboard> = {
     .row()
     .text("Режим отладки", "settings:debug_mode:"),
 
-  // debug mode
+  // debug mode (show_errors)
   debug_disabled: new InlineKeyboard()
     .text("❌ Отладка отключена", "settings:debug_mode:enable")
     .row()
@@ -56,7 +57,7 @@ export const kbs: Record<string, InlineKeyboard> = {
     .row()
     .text("⬅️ Назад", "settings:set_source_type:"),
 
-  // get_ used with '/...by' command
+  // get_ used with '/schedule' or '/records' command
   get_source_type: new InlineKeyboard()
     .text("Группы", "get:get_source_type:group")
     .row()
