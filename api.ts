@@ -1,4 +1,9 @@
-import type { ResponseSchedule, ResponseStatus, Day } from "./types";
+import type {
+  ResponseSchedule,
+  ResponseRecords,
+  ResponseStatus,
+  Day,
+} from "./types";
 import { appconfig } from "./config";
 
 export class KitisAPIwrapper {
@@ -20,31 +25,34 @@ export class KitisAPIwrapper {
     const pattern = lesson_formats[source_type] ?? "";
     return pattern.replace(/{(\w+)}/g, (_, key) => String(data[key] ?? ""));
   }
-  private formatScheduleMessage(j: Record<string, any>, truncate: number) {
-    const source_type = j?.source_type ?? "";
-    const heads: Record<string, string> = {
+  private formatScheduleMessage(j: ResponseSchedule, truncate: number) {
+    const source_type = j.source_type;
+    const heads = {
       group: "группы",
       lecturer: "преподавателя",
       room: "аудитории",
     };
-    let msg = `Расписание ${heads[source_type] ?? "..."} *${j?.source ?? "..."}*\n--------------------------\n`;
-    Object.entries((j?.days as Day) ?? []).forEach((day_data) => {
-      const day: Day = day_data[1] ?? {};
+    let msg = `Расписание ${heads[source_type]} *${j.source}*\n--------------------------\n`;
+    Object.values(j.days).forEach((day) => {
       // continue if no lessons
-      if (day.lessons.length === 0) return;
+      if (
+        day.lessons.length === 0 &&
+        ["Суббота", "Воскресенье"].includes(day.weekday)
+      )
+        return;
       msg += `\n${day.date} - *${day.weekday}*\n\n`;
-      Object.entries(day.lessons ?? []).forEach((lesson_data) => {
-        const lesson = lesson_data[1] ?? {};
+      Object.values(day.lessons).forEach((lesson) => {
+        const l_number = lesson.number > 0 ? lesson.number : "-";
         const name = this.truncate(lesson.name ?? "", truncate);
         const room = lesson.room || "Дистант";
         const subgroup = lesson.subgroup === 0 ? "" : ` (${lesson.subgroup})`;
-        msg += `${this.formatLesson(source_type, { ...lesson, name: name, room: room, subgroup: subgroup })}\n`;
+        msg += `${this.formatLesson(source_type, { ...lesson, number: l_number, name, room, subgroup })}\n`;
       });
       msg += "\n--------------------------\n";
     });
     const last_modified =
       "Обновлено: " +
-      new Date().toLocaleTimeString("ru-RU", {
+      new Date(j.last_modified * 1000).toLocaleTimeString("ru-RU", {
         day: "2-digit",
         month: "2-digit",
         year: "2-digit",
@@ -54,7 +62,7 @@ export class KitisAPIwrapper {
     msg += last_modified;
     return msg;
   }
-  private async formatRecordsMessage(j: Record<string, any>) {
+  private async formatRecordsMessage(j: ResponseRecords) {
     return "unimplemented";
   }
 
@@ -73,7 +81,7 @@ export class KitisAPIwrapper {
     const j = (await (
       await fetch(this.API_BASEURL + `/schd/${source_type}/${source}`)
     ).json()) as ResponseSchedule;
-    if (!("source" in j) || j.source === "")
+    if (!j.source)
       return this.escapeMessage(
         "Не удалось получить данные расписания, используйте /status для проверки работоспособности сайта или попробуйте позже!",
       );
@@ -90,6 +98,7 @@ export class KitisAPIwrapper {
     const j = (await (
       await fetch(this.API_BASEURL + "/status")
     ).json()) as ResponseStatus;
+    if (!j.status) return "API недоступен, попробуйте позже";
     if (j.status === 500) return "Сайт недоступен";
     return this.escapeMessage(
       `Статус: *${j.status}*\nОтклик: *${j.elapsed} мс.*`,
