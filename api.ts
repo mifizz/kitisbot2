@@ -78,14 +78,20 @@ export class KitisAPIwrapper {
     source: string,
     truncate: number = 80,
   ): Promise<string> {
-    const j = (await (
-      await fetch(this.API_BASEURL + `/schd/${source_type}/${source}`)
-    ).json()) as ResponseSchedule;
-    if (!j.source)
+    try {
+      const j = (await (
+        await fetch(this.API_BASEURL + `/schd/${source_type}/${source}`)
+      ).json()) as ResponseSchedule;
+      if (!j.source)
+        return this.escapeMessage(
+          "Не удалось получить данные расписания, используйте /status для проверки работоспособности сайта или попробуйте позже!",
+        );
+      return this.escapeMessage(this.formatScheduleMessage(j, truncate));
+    } catch {
       return this.escapeMessage(
         "Не удалось получить данные расписания, используйте /status для проверки работоспособности сайта или попробуйте позже!",
       );
-    return this.escapeMessage(this.formatScheduleMessage(j, truncate));
+    }
   }
   public async getRecordsMessage(
     source_type: string,
@@ -99,7 +105,7 @@ export class KitisAPIwrapper {
       await fetch(this.API_BASEURL + "/status")
     ).json()) as ResponseStatus;
     if (!j.status) return "API недоступен, попробуйте позже";
-    if (j.status === 500) return "Сайт недоступен";
+    if (j.status === 500) return "Сайт недоступен \\(ошибка сервера\\)";
     return this.escapeMessage(
       `Статус: *${j.status}*\nОтклик: *${j.elapsed} мс.*`,
     );
